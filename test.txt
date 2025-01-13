@@ -1,0 +1,123 @@
+            page = requests.get(f'https://ticker.finology.in/company/{instrument_name}')
+            soup = BeautifulSoup(page.text, 'html.parser')
+            num = soup.find_all("span", class_="Number")
+            eps = float(num[11].text)
+            p_holding = float(num[10].text)
+            print(eps)
+
+
+
+
+
+
+def run(playwright: Playwright) -> None:
+    browser = playwright.chromium.launch(headless=False)
+    context = browser.new_context()
+
+    for name in stock_list:
+        page = context.new_page()
+        page.goto("https://economictimes.indiatimes.com/")
+        
+        # Handle interstitial page if it appears
+        try:
+            page.goto("https://economictimes.indiatimes.com/defaultinterstitial.cms")
+            page.get_by_text("Site will load in 8 seconds.").click()
+        except Exception:
+            pass  # Skip if the interstitial page doesn't load
+        
+        # Search for stock
+        page.get_by_placeholder("Search Stock Quotes, News,").fill(name)
+        page.get_by_placeholder("Search Stock Quotes, News,").press("Enter")
+        
+        try:
+            with page.expect_popup() as popup_info:
+                # Proper string formatting
+                page.get_by_role("link", name=f"View all {name} Share News &").click()
+            new_page = popup_info.value
+            links.append(new_page.url)
+        except Exception as e:
+            print(f"Error processing stock '{name}': {e}")
+    
+    context.close()
+    browser.close()
+
+with sync_playwright() as playwright:
+    run(playwright)
+
+print("Collected Links:", links)
+
+
+
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+
+# Load historical data from CSV
+def load_csv_data(file_path):
+    try:
+        df = pd.read_csv('historical_data.csv')
+        if 'close' not in df.columns:
+            raise ValueError("CSV must contain a 'close' column for stock prices.")
+        print("CSV Data Loaded Successfully!")
+        return df
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+
+# Predict stock prices using LSTM
+def predict_stock_prices(historical_data):
+    # Use only the closing prices
+    close_prices = historical_data[['close']].values
+
+    # Normalize the data
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_data = scaler.fit_transform(close_prices)
+
+    # Prepare the dataset for LSTM
+    lookback = 60  # Number of previous time steps to use
+    X, y = [], []
+    for i in range(lookback, len(scaled_data)):
+        X.append(scaled_data[i-lookback:i, 0])
+        y.append(scaled_data[i, 0])
+    X, y = np.array(X), np.array(y)
+
+    # Reshape the data for LSTM [samples, time steps, features]
+    X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+
+    # Build the LSTM model
+    model = Sequential()
+    model.add(LSTM(units=50, return_sequences=True, input_shape=(X.shape[1], 1)))
+    model.add(LSTM(units=50, return_sequences=False))
+    model.add(Dense(units=25))
+    model.add(Dense(units=1))
+
+    # Compile and train the model
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    model.fit(X, y, batch_size=1, epochs=1)
+
+    # Predict the prices
+    predictions = model.predict(X)
+    predictions = scaler.inverse_transform(predictions)  # Reverse scaling
+    return predictions
+
+# Main Execution
+if __name__ == "__main__":
+    file_path = "historical_data.csv"  # Replace with your CSV file path
+    historical_data = load_csv_data(file_path)
+
+    if historical_data is not None:
+        # Predict the closing prices
+        predictions = predict_stock_prices(historical_data)
+
+        # Add predictions to the DataFrame
+        historical_data = historical_data.iloc[-len(predictions):]  # Align data lengths
+        historical_data['Predicted_Close'] = predictions.flatten()
+
+        # Display the result
+        print(historical_data[['close', 'Predicted_Close']].tail(10))
+
+        # Save the DataFrame with predictions to a new CSV
+        historical_data.to_csv("predicted_stock_prices.csv", index=False)
+        print("Predicted stock prices saved to 'predicted_stock_prices.csv'")
