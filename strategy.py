@@ -322,11 +322,11 @@ def run_trading_strategies():
         
         # Display the composite score and decision
         if composite_score > 0:
-            st.write(f"Composite Score: {composite_score}. Recommended Action: Buy")
+            st.write("Recommended Action: Buy")
         elif composite_score < 0:
-            st.write(f"Composite Score: {composite_score}. Recommended Action: Sell")
+            st.write(" Recommended Action: Sell")
         else:
-            st.write(f"Composite Score: {composite_score}. No clear recommendation.")
+            st.write(" No clear recommendation.")
     else:
         st.write("No Historical Data was fetched.")
 
