@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 import csv
 import time
+import time as sleep_time
 import schedule
 
 today_date = datetime.today().strftime('%Y-%m-%d')
@@ -295,11 +296,22 @@ def run_trading_strategies():
     else:
         st.write("No Historical Data was fetched.")
 
-# Scheduler setup
-schedule.every().monday.to(schedule.friday).at("08:45").do(run_trading_strategies)
-schedule.every().monday.to(schedule.friday).at("15:45").do(lambda: st.write("Trading session ended for today."))
+def main():
+    start_time = time(8, 45)
+    end_time = time(16, 0)
+    
+    while True:
+        current_time = datetime.now().time()
+        # Check if the current time is within the specified range
+        if start_time <= current_time <= end_time:
+            # Run the trading strategies
+            run_trading_strategies()
+            # Wait for 45 minutes before the next iteration
+            sleep_time.sleep(45 * 60)
+        else:
+            # Sleep for 5 minutes and recheck
+            sleep_time.sleep(5 * 60)
 
-# Run scheduled tasks
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+# Run the main function only on weekdays
+if datetime.today().weekday() < 5:  # 0 = Monday, 4 = Friday
+    main()
