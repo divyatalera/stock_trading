@@ -260,7 +260,7 @@ st.title("Stock Trading Strategies")
 #Fetch NSE Contracts
 stock_contracts = fetch_stock_contracts()
 if stock_contracts is not None:
-    stock_contracts.to_csv('stock_contracts.csv', index=False) # Save to CSV
+   stock_contracts.to_csv('stock_contracts.csv', index=False) # Save to CSV
     
 #stock_list = stock_contracts['instrument_key'].tolist()
 

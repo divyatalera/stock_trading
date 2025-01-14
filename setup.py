@@ -29,7 +29,7 @@ def getAccessToken(code):
 
 
 def run(playwright: Playwright) -> str:
-    browser = playwright.chromium.launch(headless=False)
+    browser = playwright.chromium.launch(headless=True)
     context = browser.new_context()
     page = context.new_page()
     with page.expect_request(f"*{rurl}/?code*") as request:
