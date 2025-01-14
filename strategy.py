@@ -7,7 +7,6 @@ from datetime import datetime
 import csv
 import time
 import time as sleep_time
-import schedule
 
 today_date = datetime.today().strftime('%Y-%m-%d')
 
