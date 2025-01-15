@@ -3,351 +3,300 @@ from setup import *
 import requests
 import pandas as pd
 import numpy as np
-from datetime import datetime,time
-import csv
-import time as sleep_time
+from datetime import datetime
+import csv,schedule,time,threading
 
-today_date = datetime.today().strftime('%Y-%m-%d')
+def job():
+    today_date = datetime.today().strftime('%Y-%m-%d')
 
-# Streamlit app
-st.title("Stock Trading Strategies")
+    # Upstox API credentials
+    api_key = apiKey
+    api_secret = secretKey
+    redirect_uri = rurl
+    access_token = access_token
 
-# Upstox API credentials
-api_key = apiKey
-api_secret = secretKey
-redirect_uri = rurl
-access_token = access_token
-
-# Set up the authorization header
-headers = {
-    'Authorization': f'Bearer {access_token}',
-    'Content-Type': 'application/json'
-}
-
-# Get all Contracts from NSE
-def fetch_stock_contracts():
-    url = 'https://assets.upstox.com/market-quote/instruments/exchange/complete.csv.gz'
-    symboldf = pd.read_csv(url)
-    symboldf['expiry'] = pd.to_datetime(symboldf['expiry']).apply(lambda x: x.date())
-    
-    # Filter the instruments for NSE exchange
-    df_stock = symboldf[symboldf['exchange'].isin(['NSE_EQ', 'BSE_EQ'])]
-    df_stock = df_stock[(df_stock['last_price'] != 0) & (df_stock['last_price'] >= 20)]
-    df_stock = df_stock.drop(columns=['expiry', 'strike', 'tick_size','option_type','instrument_type'])
-    return df_stock
-
-def CheckBalance():
-    url = 'https://api-v2.upstox.com/user/get-funds-and-margin'
+    # Set up the authorization header
     headers = {
-        'accept': 'application/json',
-        'Api-Version': '2.0',
-        'Authorization': f'Bearer {access_token}'
-    }
-    params = {
-        'segment': 'SEC'  # 'Equity'
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
     }
 
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code == 200:
-        json_response = response.json()
-        available_margin = json_response.get('data', {}).get('equity', {}).get('available_margin', 0.0)
-        return available_margin
-    else:
-        return None
+    # Function to fetch stock contracts from CSV file
+    def fetch_stock_contracts_from_csv():
+        name_to_key_mapping = []
+        with open('stock_contracts.csv', 'r') as file:
+            csv_reader = csv.DictReader(file)
+            for row in csv_reader:
+                name_to_key_mapping.append({'name': row['name'], 'instrument_key': row['instrument_key']})
+        name_to_key = {item['name']: item['instrument_key'] for item in name_to_key_mapping}
+        return name_to_key
 
-# Function to know whether today is a holiday or not
-def isholiday():
-    url = f"https://api.upstox.com/v2/market/holidays/{today_date}"
-    
-    headers = {
+    def fetch_intraday_candle(instrument_key, interval, access_token):
+        url = f"https://api.upstox.com/v2/historical-candle/intraday/{instrument_key}/{interval}"
+
+        payload={}
+        headers = {
         'Accept': 'application/json'
-    }
+        }
 
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        holiday_data = response.json()
-        if holiday_data.get('isHoliday'):
-            return True
+        response = requests.request("GET", url, headers=headers, data=payload)
+        if response.status_code == 200:
+            try:
+                data = response.json().get('data')
+                if not data:
+                    return None
+
+                candles = data.get('candles', [])
+                if not candles:
+                    return None
+
+                df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'other'])
+                df = df.drop(columns=['other'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df.set_index('timestamp', inplace=False)
+                return df
+            except KeyError as e:
+                print(f"KeyError occurred: {e}")
+                return None
         else:
-            return False
-    else:
-        return None
+            print(f"Error fetching data: {response.status_code} - {response.text}")
+            return None  
     
 
-def fetch_intraday_candle(instrument_key, interval, access_token):
-    url = f"https://api.upstox.com/v2/historical-candle/intraday/{instrument_key}/{interval}"
 
-    payload={}
-    headers = {
-    'Accept': 'application/json'
-    }
-
-    response = requests.request("GET", url, headers=headers, data=payload)
-    if response.status_code == 200:
-        try:
-            data = response.json().get('data')
-            if not data:
-                return None
-
-            candles = data.get('candles', [])
-            if not candles:
-                return None
-
-            df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'other'])
-            df = df.drop(columns=['other'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df.set_index('timestamp', inplace=False)
-            return df
-        except KeyError as e:
-            return None
-    else:
-        return None  
-
-
-# Function to fetch historical data 
-def fetch_historical_candle(instrument_key, interval, to_date, from_date, access_token):
-    url = f"https://api.upstox.com/v2/historical-candle/{instrument_key}/{interval}/{to_date}/{from_date}"
-    
-    headers = {
-        'Accept': 'application/json',
-        'Authorization': f'Bearer {access_token}'
-    }
-
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        try:
-            data = response.json().get('data')
-            if not data:
-                return None
-
-            candles = data.get('candles', [])
-            if not candles:
-                return None
-
-            df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'other'])
-            df = df.drop(columns=['other'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df.set_index('timestamp', inplace=False)
-            return df
-        except KeyError as e:
-            return None
-    else:
-        return None  
-
-#get symbol name from instrument key 
-def get_instrument_name_by_key(instrument_key):
-    with open('stock_contracts.csv', 'r') as file:
-        csvreader = csv.reader(file)
-        header = next(csvreader)  # Skip the header row
-
-        # Loop through each row to find the matching key
-        for row in csvreader:
-            if row[0] == instrument_key:  # Assuming the key is in the first column
-                return row[2]  # Assuming the name is in the second column
-    return None
-
-def volume_based_trading(df, symbol):
-    latest_volume = df['volume'].iloc[0]
-    previous_volume = df['volume'].iloc[1]
-    latest_close = df['close'].iloc[0]
-    previous_close = df['close'].iloc[1]
-    
-    # If volume is increasing with an upward price move (Buy signal)
-    if latest_volume > previous_volume and latest_close > previous_close:
-        return f"Volume increasing with price: Consider buying {symbol} at {latest_close}"
+    # Function to fetch historical data 
+    def fetch_historical_candle(instrument_key, interval, to_date, from_date, access_token):
+        url = f"https://api.upstox.com/v2/historical-candle/{instrument_key}/{interval}/{to_date}/{from_date}"
         
-    # If volume is increasing with a downward price move (Sell signal)
-    elif latest_volume > previous_volume and latest_close < previous_close:
-        return f"Volume increasing with price drop: Consider selling {symbol} at {latest_close}"
-    
-    # If volume is decreasing during a price uptrend (Caution)
-    elif latest_volume < previous_volume and latest_close > previous_close:
-        return f"Volume decreasing with price uptrend: Caution for {symbol}, trend may weaken"
-    
-    # If volume is decreasing during a price downtrend (Potential reversal)
-    elif latest_volume < previous_volume and latest_close < previous_close:
-        return f"Volume decreasing with price downtrend: Potential reversal for {symbol}"
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {access_token}'
+        }
 
-# RSI strategy
-def calculate_rsi(df, period=14):
-    if len(df) < period + 1:
-        df['RSI'] = np.nan
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            try:
+                data = response.json().get('data')
+                if not data:
+                    return None
+
+                candles = data.get('candles', [])
+                if not candles:
+                    return None
+
+                df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'other'])
+                df = df.drop(columns=['other'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df.set_index('timestamp', inplace=False)
+                return df
+            except KeyError as e:
+                print(f"KeyError occurred: {e}")
+                return None
+        else:
+            print(f"Error fetching data: {response.status_code} - {response.text}")
+            return None  
+    
+
+    #get symbol name from instrument key 
+    def get_instrument_name_by_key(instrument_key):
+        with open('stock_contracts.csv', 'r') as file:
+            csvreader = csv.reader(file)
+            header = next(csvreader)  # Skip the header row
+            # Loop through each row to find the matching key
+            for row in csvreader:
+                if row[0] == instrument_key:  # Assuming the key is in the first column
+                    return row[2]  # Assuming the name is in the second column
+        return None
+
+    # Fetch stock data for a given instrument key (both intraday and historical)
+    def fetch_stock_data(instrument_key, interval, from_date, to_date,access_token):
+        df1 = fetch_intraday_candle(instrument_key, interval,access_token)
+        df2 = fetch_historical_candle(instrument_key, interval, to_date, from_date,access_token)
+        if df1 is not None and df2 is not None:
+            historical_data = pd.concat([df1, df2], ignore_index=True)
+            return historical_data
+        return None
+
+    # Strategy calculation functions
+    def volume_based_trading(df, symbol):
+        latest_volume = df['volume'].iloc[0]
+        previous_volume = df['volume'].iloc[1]
+        latest_close = df['close'].iloc[0]
+        previous_close = df['close'].iloc[1]
+        
+        if latest_volume > previous_volume and latest_close > previous_close:
+            return f"Volume increasing with price: Consider buying at {latest_close}"
+        elif latest_volume > previous_volume and latest_close < previous_close:
+            return f"Volume increasing with price drop: Consider selling : {latest_close}"
+        elif latest_volume < previous_volume and latest_close > previous_close:
+            return f"Volume decreasing with price uptrend: Caution for {symbol}, trend may weaken"
+        elif latest_volume < previous_volume and latest_close < previous_close:
+            return f"Volume decreasing with price downtrend: Potential reversal for {symbol}"
+
+    def calculate_rsi(df, period=14):
+        if len(df) < period + 1:
+            df['RSI'] = np.nan
+            return df
+
+        delta = df['close'].diff(1)
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+        
+        avg_gain = gain.rolling(window=period).mean()
+        avg_loss = loss.rolling(window=period).mean()
+        
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        df['RSI'] = rsi
         return df
 
-    delta = df['close'].diff(1)
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-    
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    df['RSI'] = rsi
-    return df
-
-def check_rsi(df, symbol, buy_threshold=30, sell_threshold=70):
-    latest_rsi = df['RSI'].iloc[-1].astype(int)
-    latest_close = df['close'].iloc[0]        
-    if pd.notna(latest_rsi):
-        if latest_rsi < buy_threshold:
-            return f"RSI Strategy result: Buying {symbol} at {latest_close} (RSI: {latest_rsi})"
-        elif latest_rsi > sell_threshold:
-            return f"RSI Strategy result: Selling {symbol} at {latest_close} (RSI: {latest_rsi})"
-        else:
-            return 'The stock is not over bought or over-sold'
+    def check_rsi(df, symbol, buy_threshold=30, sell_threshold=70):
+        latest_rsi = df['RSI'].iloc[-1].astype(int)
+        latest_close = df['close'].iloc[0]
+        if pd.notna(latest_rsi):
+            if latest_rsi < buy_threshold:
+                return f"RSI Strategy result: Buy at {latest_close} (RSI: {latest_rsi})"
+            elif latest_rsi > sell_threshold:
+                return f"RSI Strategy result: Sell at {latest_close} (RSI: {latest_rsi})"
+            else:
+                return 'The stock is not overbought or oversold'
             
-# MACD strategy
-def calculate_ema(df, period, column='close'):
-    return df[column].ewm(span=period, adjust=False).mean()
+    # MACD strategy
+    def calculate_ema(df, period, column='close'):
+        return df[column].ewm(span=period, adjust=False).mean()
 
-def calculate_macd(df, fast_period=12, slow_period=26, signal_period=9):
-    df['EMA_fast'] = calculate_ema(df, fast_period)
-    df['EMA_slow'] = calculate_ema(df, slow_period)
-    df['MACD'] = df['EMA_fast'] - df['EMA_slow']
-    df['Signal_Line'] = df['MACD'].ewm(span=signal_period, adjust=False).mean()
-    df['MACD_Histogram'] = df['MACD'] - df['Signal_Line']
-    return df
+    def calculate_macd(df, fast_period=12, slow_period=26, signal_period=9):
+        df['EMA_fast'] = calculate_ema(df, fast_period)
+        df['EMA_slow'] = calculate_ema(df, slow_period)
+        df['MACD'] = df['EMA_fast'] - df['EMA_slow']
+        df['Signal_Line'] = df['MACD'].ewm(span=signal_period, adjust=False).mean()
+        df['MACD_Histogram'] = df['MACD'] - df['Signal_Line']
+        return df
+                
+    def calculate_macd(df, fast_period=12, slow_period=26, signal_period=9):
+        df['EMA_fast'] = calculate_ema(df, fast_period)
+        df['EMA_slow'] = calculate_ema(df, slow_period)
+        df['MACD'] = df['EMA_fast'] - df['EMA_slow']
+        df['Signal_Line'] = df['MACD'].ewm(span=signal_period, adjust=False).mean()
+        df['MACD_Histogram'] = df['MACD'] - df['Signal_Line']
+        return df
 
-def check_macd_and_trade(df, symbol):
-    latest_macd = df['MACD'].iloc[-1]
-    latest_signal = df['Signal_Line'].iloc[-1]
-    latest_close = df['close'].iloc[0]
-    if latest_macd > latest_signal:
-        return f"MACD Strategy result: Buying {symbol} at {latest_close}"
-    elif latest_macd < latest_signal:
-        return f"MACD Strategy result: Selling {symbol} at {latest_close}"
+    def check_macd_and_trade(df, symbol):
+        latest_macd = df['MACD'].iloc[-1]
+        latest_signal = df['Signal_Line'].iloc[-1]
+        latest_close = df['close'].iloc[0]
+        if latest_macd > latest_signal:
+            return f"MACD Strategy result: Buy at {latest_close}"
+        elif latest_macd < latest_signal:
+            return f"MACD Strategy result: Sell at {latest_close}"
+        else:
+            return 'No clear MACD signal for trading'
+        
+    def calculate_ichimoku(df):
+        df['tenkan_sen'] = (df['high'].rolling(window=9).max() + df['low'].rolling(window=9).min()) / 2
+        df['kijun_sen'] = (df['high'].rolling(window=26).max() + df['low'].rolling(window=26).min()) / 2
+        df['senkou_span_a'] = ((df['tenkan_sen'] + df['kijun_sen']) / 2).shift(26)
+        df['senkou_span_b'] = ((df['high'].rolling(window=52).max() + df['low'].rolling(window=52).min()) / 2).shift(26)
+        df['chikou_span'] = df['close'].shift(-26)
+        return df
+
+    def check_ichimoku_and_trade(df, symbol):
+        latest_close = df['close'].iloc[0]
+        latest_span_a = df['senkou_span_a'].iloc[-1]
+        latest_span_b = df['senkou_span_b'].iloc[-1]
+        if latest_close > max(latest_span_a, latest_span_b):
+            return f"Ichimoku Strategy result: Buy at {latest_close}"
+        elif latest_close < min(latest_span_a, latest_span_b):
+            return f"Ichimoku Strategy result: Sell at {latest_close}"
+        else:
+            return f"No clear Ichimoku signal"
+
+    # Streamlit app
+    st.title("Stock Trading Strategies")
+
+    # Select stocks from the CSV
+    name_to_key = fetch_stock_contracts_from_csv()
+    selected_names = st.multiselect("Select stocks", options=list(name_to_key.keys()))
+    instrument_keys = [name_to_key[name] for name in selected_names]
+
+    if selected_names:
+        st.write("Selected stocks:", selected_names)
+
+        # Set the timeframe and date range
+        access_token = access_token
+        interval = '30minute'
+        from_date = '2023-09-23'
+        to_date = today_date
+
+        # Fetch stock data for each selected stock and evaluate strategies
+        for instrument_key in instrument_keys:
+            historical_data = fetch_stock_data(instrument_key, interval, from_date, to_date,access_token)
+            
+            if historical_data is not None:
+                # Perform analysis
+                symbol = get_instrument_name_by_key(instrument_key)
+                volume_signal = volume_based_trading(historical_data, symbol)
+                rsi_data = calculate_rsi(historical_data)
+                rsi_signal = check_rsi(rsi_data, symbol)
+                macd_data = calculate_macd(historical_data)
+                macd_signal = check_macd_and_trade(macd_data, symbol)
+                ichimoku_data = calculate_ichimoku(historical_data)
+                ichimoku_signal = check_ichimoku_and_trade(ichimoku_data, symbol)
+
+                # Display individual strategy results
+                st.markdown(f"Analysis for **{symbol}**:")
+                st.write(volume_signal)
+                st.write(rsi_signal)
+                st.write(macd_signal)
+                st.write(ichimoku_signal)
+
+                # Composite decision logic
+                composite_score = 0
+                # Add scoring logic based on signals
+                if volume_signal and "Buy" in volume_signal or "Buying" in (rsi_signal or '') or "Buying" in (macd_signal or '') or "Buying" in (ichimoku_signal or ''):
+                    composite_score += 1
+                if volume_signal and "Sell" in volume_signal or "Selling" in (rsi_signal or '') or "Selling" in (macd_signal or '') or "Selling" in (ichimoku_signal or ''):
+                    composite_score -= 1
+
+                # Display the final recommendation
+                if composite_score > 0:
+                    st.markdown(f"**Recommended Action: Buy {symbol}**")
+                elif composite_score < 0:
+                    st.markdown(f"**Recommended Action: Sell {symbol}**")
+                else:
+                    st.markdown(f"**No clear recommendation for {symbol}**")
+            else:
+                st.markdown(f"**No data available for {symbol}.**")
     else:
-        return 'No clear MACD signal for trading'
-    
-#Ichimoku Cloud
-# Function to calculate Ichimoku Cloud components
-def calculate_ichimoku(df):
-    # Calculate Tenkan-sen (Conversion Line) - 9 period high/low average
-    df['tenkan_sen'] = (df['high'].rolling(window=9).max() + df['low'].rolling(window=9).min()) / 2
+        st.write("Please select at least one stock to analyze.")
 
-    # Calculate Kijun-sen (Base Line) - 26 period high/low average
-    df['kijun_sen'] = (df['high'].rolling(window=26).max() + df['low'].rolling(window=26).min()) / 2
+def run_schedule():
+    # Schedule the job at 9:25 AM every weekday
+    schedule.every().monday.at("09:25").do(job)
+    schedule.every().tuesday.at("09:25").do(job)
+    schedule.every().wednesday.at("09:25").do(job)
+    schedule.every().thursday.at("09:25").do(job)
+    schedule.every().friday.at("09:25").do(job)
 
-    # Calculate Senkou Span A (Leading Span A) - average of Tenkan-sen and Kijun-sen, shifted 26 periods ahead
-    df['senkou_span_a'] = ((df['tenkan_sen'] + df['kijun_sen']) / 2).shift(26)
+    # Schedule the job to run every 45 minutes after 9:25 AM, until 3:30 PM
+    for minute in range(25, 375, 45):  # 9:25 AM to 3:30 PM
+        schedule.every().monday.at(f"09:{minute:02d}").do(job)
+        schedule.every().tuesday.at(f"09:{minute:02d}").do(job)
+        schedule.every().wednesday.at(f"09:{minute:02d}").do(job)
+        schedule.every().thursday.at(f"09:{minute:02d}").do(job)
+        schedule.every().friday.at(f"09:{minute:02d}").do(job)
 
-    # Calculate Senkou Span B (Leading Span B) - 52 period high/low average, shifted 26 periods ahead
-    df['senkou_span_b'] = ((df['high'].rolling(window=52).max() + df['low'].rolling(window=52).min()) / 2).shift(26)
+    # Continuously run the scheduler
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
-    # Calculate Chikou Span (Lagging Span) - current close, shifted 26 periods back
-    df['chikou_span'] = df['close'].shift(-26)
+# To run the scheduler in the background without blocking the rest of your program
+def start_scheduler_thread():
+    scheduler_thread = threading.Thread(target=run_schedule)
+    scheduler_thread.start()
 
-    return df
-
-# Function to check for Ichimoku Cloud trading signals
-def check_ichimoku_and_trade(df, symbol):
-    latest_close = df['close'].iloc[0]
-    latest_span_a = df['senkou_span_a'].iloc[-1]
-    latest_span_b = df['senkou_span_b'].iloc[-1]
-    # Check if price is above the cloud (bullish signal)
-    if latest_close > max(latest_span_a, latest_span_b):
-        return f"Ichimoku Strategy result: Buying {symbol} at {latest_close}"
-    # Check if price is below the cloud (bearish signal)
-    elif latest_close < min(latest_span_a, latest_span_b):
-        return f"Ichimoku Strategy result: Selling {symbol} at {latest_close}"
-    else:
-        return f"No clear Ichimoku signal for {symbol}"
-  
-
-
-
-# Function to run trading strategies during the specified time
-
-#def run_trading_strategies():
-stock_contracts = fetch_stock_contracts()
-if stock_contracts is not None:
-    stock_contracts.to_csv('stock_contracts.csv', index=False) # Save to CSV
-    
-stock_list = ['NSE_EQ|INE481G01011','NSE_EQ|INE040A01034','NSE_EQ|INE387A01021','NSE_EQ|INE758T01015']
-instrument_key = st.selectbox("Select Stock Instrument Key", stock_list)
-instrument_name = get_instrument_name_by_key(instrument_key)
-
-interval = '30minute'
-interval1 = '1minute'
-from_date = '2023-09-23'
-to_date = today_date
-
-df1 = fetch_intraday_candle(instrument_key, interval, access_token) 
-df2 = fetch_historical_candle(instrument_key, interval, to_date, from_date, access_token)
-
-if df1 is not None and df2 is not None:
-    historical_data = pd.concat([df1, df2], ignore_index=True)
-    
-    # Perform and display analysis
-    volume_signal = volume_based_trading(historical_data, instrument_name)
-    rsi_data = calculate_rsi(historical_data)
-    rsi_signal = check_rsi(rsi_data, instrument_name)
-    macd_data = calculate_macd(historical_data)
-    macd_signal = check_macd_and_trade(macd_data, instrument_name)
-    ichimoku_data = calculate_ichimoku(historical_data)
-    ichimoku_signal = check_ichimoku_and_trade(ichimoku_data, instrument_name)
-
-    st.write(volume_signal)
-    st.write(rsi_signal)
-    st.write(macd_signal)
-    st.write(ichimoku_signal)
-    
-    composite_score = 0
-    
-    # Assign points for Volume-based trading signal
-    if "Buy" in volume_signal:
-        composite_score += 1
-    elif "Sell" in volume_signal:
-        composite_score -= 1
-    
-    # Assign points for RSI signal
-    if "Buying" in rsi_signal:
-        composite_score += 1
-    elif "Selling" in rsi_signal:
-        composite_score -= 1
-    
-    # Assign points for MACD signal
-    if "Buying" in macd_signal:
-        composite_score += 1
-    elif "Selling" in macd_signal:
-        composite_score -= 1
-    
-    # Assign points for Ichimoku signal
-    if "Buying" in ichimoku_signal:
-        composite_score += 1
-    elif "Selling" in ichimoku_signal:
-        composite_score -= 1
-    
-    # Display the composite score and decision
-    if composite_score > 0:
-        st.write("Recommended Action: Buy")
-    elif composite_score < 0:
-        st.write(" Recommended Action: Sell")
-    else:
-        st.write(" No clear recommendation.")
-else:
-    st.write("No Historical Data was fetched.")
-
-
-# def main():
-#     start_time = time(9, 18)
-#     end_time = time(15, 35)
-    
-#     while True:
-#         current_time = datetime.now().time()
-#         # Check if the current time is within the specified range
-#         if start_time <= current_time <= end_time:
-#             # Run the trading strategies
-#             run_trading_strategies()
-#             # Wait for 45 minutes before the next iteration
-#             sleep_time.sleep(45 * 60)
-#         else:
-#             # Sleep for 5 minutes and recheck
-#             sleep_time.sleep(5 * 60)
-
-# # Run the main function only on weekdays
-# if datetime.today().weekday() < 5:  # 0 = Monday, 4 = Friday
-#     main()
+# Call start_scheduler_thread() in your app's main entry point
+if __name__ == "__main__":
+    start_scheduler_thread()
