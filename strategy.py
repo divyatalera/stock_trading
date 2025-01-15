@@ -9,6 +9,9 @@ import time as sleep_time
 
 today_date = datetime.today().strftime('%Y-%m-%d')
 
+# Streamlit app
+st.title("Stock Trading Strategies")
+
 # Upstox API credentials
 api_key = apiKey
 api_secret = secretKey
@@ -254,80 +257,79 @@ def check_ichimoku_and_trade(df, symbol):
         return f"No clear Ichimoku signal for {symbol}"
   
 
-# Streamlit app
-st.title("Stock Trading Strategies")
+
 
 # Function to run trading strategies during the specified time
 
-def run_trading_strategies():
-    stock_contracts = fetch_stock_contracts()
-    if stock_contracts is not None:
-        stock_contracts.to_csv('stock_contracts.csv', index=False) # Save to CSV
-        
-    stock_list = ['NSE_EQ|INE481G01011','NSE_EQ|INE040A01034','NSE_EQ|INE387A01021','NSE_EQ|INE758T01015']
-    instrument_key = st.selectbox("Select Stock Instrument Key", stock_list)
-    instrument_name = get_instrument_name_by_key(instrument_key)
+#def run_trading_strategies():
+stock_contracts = fetch_stock_contracts()
+if stock_contracts is not None:
+    stock_contracts.to_csv('stock_contracts.csv', index=False) # Save to CSV
+    
+stock_list = ['NSE_EQ|INE481G01011','NSE_EQ|INE040A01034','NSE_EQ|INE387A01021','NSE_EQ|INE758T01015']
+instrument_key = st.selectbox("Select Stock Instrument Key", stock_list)
+instrument_name = get_instrument_name_by_key(instrument_key)
 
-    interval = '30minute'
-    interval1 = '1minute'
-    from_date = '2023-09-23'
-    to_date = today_date
+interval = '30minute'
+interval1 = '1minute'
+from_date = '2023-09-23'
+to_date = today_date
 
-    df1 = fetch_intraday_candle(instrument_key, interval, access_token) 
-    df2 = fetch_historical_candle(instrument_key, interval, to_date, from_date, access_token)
+df1 = fetch_intraday_candle(instrument_key, interval, access_token) 
+df2 = fetch_historical_candle(instrument_key, interval, to_date, from_date, access_token)
 
-    if df1 is not None and df2 is not None:
-        historical_data = pd.concat([df1, df2], ignore_index=True)
-        
-        # Perform and display analysis
-        volume_signal = volume_based_trading(historical_data, instrument_name)
-        rsi_data = calculate_rsi(historical_data)
-        rsi_signal = check_rsi(rsi_data, instrument_name)
-        macd_data = calculate_macd(historical_data)
-        macd_signal = check_macd_and_trade(macd_data, instrument_name)
-        ichimoku_data = calculate_ichimoku(historical_data)
-        ichimoku_signal = check_ichimoku_and_trade(ichimoku_data, instrument_name)
+if df1 is not None and df2 is not None:
+    historical_data = pd.concat([df1, df2], ignore_index=True)
+    
+    # Perform and display analysis
+    volume_signal = volume_based_trading(historical_data, instrument_name)
+    rsi_data = calculate_rsi(historical_data)
+    rsi_signal = check_rsi(rsi_data, instrument_name)
+    macd_data = calculate_macd(historical_data)
+    macd_signal = check_macd_and_trade(macd_data, instrument_name)
+    ichimoku_data = calculate_ichimoku(historical_data)
+    ichimoku_signal = check_ichimoku_and_trade(ichimoku_data, instrument_name)
 
-        st.write(volume_signal)
-        st.write(rsi_signal)
-        st.write(macd_signal)
-        st.write(ichimoku_signal)
-        
-        composite_score = 0
-        
-        # Assign points for Volume-based trading signal
-        if "Buy" in volume_signal:
-            composite_score += 1
-        elif "Sell" in volume_signal:
-            composite_score -= 1
-        
-        # Assign points for RSI signal
-        if "Buying" in rsi_signal:
-            composite_score += 1
-        elif "Selling" in rsi_signal:
-            composite_score -= 1
-        
-        # Assign points for MACD signal
-        if "Buying" in macd_signal:
-            composite_score += 1
-        elif "Selling" in macd_signal:
-            composite_score -= 1
-        
-        # Assign points for Ichimoku signal
-        if "Buying" in ichimoku_signal:
-            composite_score += 1
-        elif "Selling" in ichimoku_signal:
-            composite_score -= 1
-        
-        # Display the composite score and decision
-        if composite_score > 0:
-            st.write("Recommended Action: Buy")
-        elif composite_score < 0:
-            st.write(" Recommended Action: Sell")
-        else:
-            st.write(" No clear recommendation.")
+    st.write(volume_signal)
+    st.write(rsi_signal)
+    st.write(macd_signal)
+    st.write(ichimoku_signal)
+    
+    composite_score = 0
+    
+    # Assign points for Volume-based trading signal
+    if "Buy" in volume_signal:
+        composite_score += 1
+    elif "Sell" in volume_signal:
+        composite_score -= 1
+    
+    # Assign points for RSI signal
+    if "Buying" in rsi_signal:
+        composite_score += 1
+    elif "Selling" in rsi_signal:
+        composite_score -= 1
+    
+    # Assign points for MACD signal
+    if "Buying" in macd_signal:
+        composite_score += 1
+    elif "Selling" in macd_signal:
+        composite_score -= 1
+    
+    # Assign points for Ichimoku signal
+    if "Buying" in ichimoku_signal:
+        composite_score += 1
+    elif "Selling" in ichimoku_signal:
+        composite_score -= 1
+    
+    # Display the composite score and decision
+    if composite_score > 0:
+        st.write("Recommended Action: Buy")
+    elif composite_score < 0:
+        st.write(" Recommended Action: Sell")
     else:
-        st.write("No Historical Data was fetched.")
+        st.write(" No clear recommendation.")
+else:
+    st.write("No Historical Data was fetched.")
 
 
 # def main():
