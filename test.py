@@ -15,4 +15,5 @@
 #     time.sleep(1)  # Wait a second before checking again
 
 import os
-os.system("streamlit run /workspaces/stock_trading/strategy.py")
+# os.system("streamlit run /workspaces/stock_trading/strategy.py")
+os.system("streamlit run strategy.py")
