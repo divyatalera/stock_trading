@@ -1,9 +1,10 @@
 import schedule
 import streamlit as st
 import time
+from datetime import datetime
 
 def print_hello_world():
-    st.write("hello world")
+    st.write(f"Hello world at {datetime.now()}")
 
 # Schedule the task
 schedule.every(1).minutes.do(print_hello_world)
