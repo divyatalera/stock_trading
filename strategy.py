@@ -3,9 +3,8 @@ from setup import *
 import requests
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime,time
 import csv
-import time
 import time as sleep_time
 
 today_date = datetime.today().strftime('%Y-%m-%d')
@@ -270,6 +269,7 @@ def run_trading_strategies():
     instrument_name = get_instrument_name_by_key(instrument_key)
 
     interval = '30minute'
+    interval1 = '1minute'
     from_date = '2023-09-23'
     to_date = today_date
 
@@ -331,8 +331,8 @@ def run_trading_strategies():
 
 
 def main():
-    start_time = time(8, 45)
-    end_time = time(16, 0)
+    start_time = time(9, 18)
+    end_time = time(15, 35)
     
     while True:
         current_time = datetime.now().time()
