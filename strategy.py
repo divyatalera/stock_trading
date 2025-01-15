@@ -330,22 +330,22 @@ def run_trading_strategies():
         st.write("No Historical Data was fetched.")
 
 
-def main():
-    start_time = time(9, 18)
-    end_time = time(15, 35)
+# def main():
+#     start_time = time(9, 18)
+#     end_time = time(15, 35)
     
-    while True:
-        current_time = datetime.now().time()
-        # Check if the current time is within the specified range
-        if start_time <= current_time <= end_time:
-            # Run the trading strategies
-            run_trading_strategies()
-            # Wait for 45 minutes before the next iteration
-            sleep_time.sleep(45 * 60)
-        else:
-            # Sleep for 5 minutes and recheck
-            sleep_time.sleep(5 * 60)
+#     while True:
+#         current_time = datetime.now().time()
+#         # Check if the current time is within the specified range
+#         if start_time <= current_time <= end_time:
+#             # Run the trading strategies
+#             run_trading_strategies()
+#             # Wait for 45 minutes before the next iteration
+#             sleep_time.sleep(45 * 60)
+#         else:
+#             # Sleep for 5 minutes and recheck
+#             sleep_time.sleep(5 * 60)
 
-# Run the main function only on weekdays
-if datetime.today().weekday() < 5:  # 0 = Monday, 4 = Friday
-    main()
+# # Run the main function only on weekdays
+# if datetime.today().weekday() < 5:  # 0 = Monday, 4 = Friday
+#     main()

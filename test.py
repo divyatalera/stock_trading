@@ -1,0 +1,16 @@
+import schedule
+import streamlit as st
+import time
+
+def print_hello_world():
+    st.write("hello world")
+
+# Schedule the task
+schedule.every(1).minutes.do(print_hello_world)
+
+# Run the scheduler
+while True:
+    schedule.run_pending()
+    time.sleep(1)  # Wait a second before checking again
+
+
