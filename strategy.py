@@ -1,24 +1,14 @@
-import streamlit as st
-from setup import *
-import requests
-import pandas as pd
-import numpy as np
-from datetime import datetime
+import streamlit as st,requests,pandas as pd,numpy as np
 import csv,schedule,time,threading
+from setup import *
+from datetime import datetime
 
 def job():
     today_date = datetime.today().strftime('%Y-%m-%d')
-
-    # Upstox API credentials
-    api_key = apiKey
-    api_secret = secretKey
-    redirect_uri = rurl
     access_token = access_token
-
-    # Set up the authorization header
     headers = {
         'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json'
+        'Accept': 'application/json'
     }
 
     # Function to fetch stock contracts from CSV file
@@ -31,25 +21,19 @@ def job():
         name_to_key = {item['name']: item['instrument_key'] for item in name_to_key_mapping}
         return name_to_key
 
+    # Function to fetch intraday data 
     def fetch_intraday_candle(instrument_key, interval, access_token):
         url = f"https://api.upstox.com/v2/historical-candle/intraday/{instrument_key}/{interval}"
-
         payload={}
-        headers = {
-        'Accept': 'application/json'
-        }
-
         response = requests.request("GET", url, headers=headers, data=payload)
         if response.status_code == 200:
             try:
                 data = response.json().get('data')
                 if not data:
                     return None
-
                 candles = data.get('candles', [])
                 if not candles:
                     return None
-
                 df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'other'])
                 df = df.drop(columns=['other'])
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -62,19 +46,10 @@ def job():
             print(f"Error fetching data: {response.status_code} - {response.text}")
             return None  
     
-
-
     # Function to fetch historical data 
     def fetch_historical_candle(instrument_key, interval, to_date, from_date, access_token):
         url = f"https://api.upstox.com/v2/historical-candle/{instrument_key}/{interval}/{to_date}/{from_date}"
-        
-        headers = {
-            'Accept': 'application/json',
-            'Authorization': f'Bearer {access_token}'
-        }
-
         response = requests.get(url, headers=headers)
-
         if response.status_code == 200:
             try:
                 data = response.json().get('data')
@@ -84,7 +59,6 @@ def job():
                 candles = data.get('candles', [])
                 if not candles:
                     return None
-
                 df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'other'])
                 df = df.drop(columns=['other'])
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -103,7 +77,6 @@ def job():
         with open('stock_contracts.csv', 'r') as file:
             csvreader = csv.reader(file)
             header = next(csvreader)  # Skip the header row
-            # Loop through each row to find the matching key
             for row in csvreader:
                 if row[0] == instrument_key:  # Assuming the key is in the first column
                     return row[2]  # Assuming the name is in the second column
@@ -123,8 +96,7 @@ def job():
         latest_volume = df['volume'].iloc[0]
         previous_volume = df['volume'].iloc[1]
         latest_close = df['close'].iloc[0]
-        previous_close = df['close'].iloc[1]
-        
+        previous_close = df['close'].iloc[1]    
         if latest_volume > previous_volume and latest_close > previous_close:
             return f"Volume increasing with price: Consider buying at {latest_close}"
         elif latest_volume > previous_volume and latest_close < previous_close:
@@ -138,14 +110,11 @@ def job():
         if len(df) < period + 1:
             df['RSI'] = np.nan
             return df
-
         delta = df['close'].diff(1)
         gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-        
+        loss = -delta.where(delta < 0, 0) 
         avg_gain = gain.rolling(window=period).mean()
-        avg_loss = loss.rolling(window=period).mean()
-        
+        avg_loss = loss.rolling(window=period).mean() 
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
         df['RSI'] = rsi
