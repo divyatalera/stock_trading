@@ -17,7 +17,7 @@ headers = {
 # Function to fetch stock contracts from CSV file
 def fetch_stock_contracts_from_csv():
     name_to_key_mapping = []
-    with open('stock_contracts.csv', 'r') as file:
+    with open('/workspaces/stock_trading/stock_contracts.csv', 'r') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
             name_to_key_mapping.append({'name': row['name'], 'instrument_key': row['instrument_key']})
@@ -31,7 +31,7 @@ def fetch_intraday_candle(instrument_key, interval, access_token):
     response = requests.request("GET", url, headers=headers, data=payload)
     if response.status_code == 200:
         try:
-            data = response.json().get('data')
+            data = responseß.json().get('data')
             if not data:
                 return None
             candles = data.get('candles', [])
@@ -77,7 +77,7 @@ def fetch_historical_candle(instrument_key, interval, to_date, from_date, access
 
 #get symbol name from instrument key 
 def get_instrument_name_by_key(instrument_key):
-    with open('stock_contracts.csv', 'r') as file:
+    with open('/workspaces/stock_trading/stock_contracts.csv', 'r') as file:
         csvreader = csv.reader(file)
         header = next(csvreader)  # Skip the header row
         for row in csvreader:
@@ -87,7 +87,7 @@ def get_instrument_name_by_key(instrument_key):
 
 # Fetch stock data for a given instrument key (both intraday and historical)
 def fetch_stock_data(instrument_key, interval, from_date, to_date,access_token):
-    df1 = fetch_intraday_candle(instrument_key, interval,access_token)
+    df1 = fetch_intraday_candle(instrument_key, interval1,access_token)
     df2 = fetch_historical_candle(instrument_key, interval, to_date, from_date,access_token)
     if df1 is not None and df2 is not None:
         historical_data = pd.concat([df1, df2], ignore_index=True)
@@ -198,6 +198,7 @@ if selected_names:
     # Set the timeframe and date range
     access_token = access_token
     interval = '30minute'
+    interval1 = '1minute'
     from_date = '2023-09-23'
     to_date = today_date
 
